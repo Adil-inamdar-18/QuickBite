@@ -6,11 +6,11 @@ const ownerSlice = createSlice({
     myShopData: null,
   },
   reducers: {
-    setMyShopData: (state, actions) => {
-      state.myShopData = actions.payload;
+    setMyShopData: (state, action) => {
+      state.myShopData = action.payload;
     },
   },
 });
 
-export const { setUserData, setCity, setMyShopData } = ownerSlice.actions;
+export const { setMyShopData } = ownerSlice.actions;
 export default ownerSlice.reducer;

@@ -1,30 +1,35 @@
-import React from "react";
-import { setMyOrders } from "../redux/userslice";
-import { useDispatch, useSelector } from "react-redux";
-import { useState } from "react";
 import { useEffect } from "react";
-import axios from "axios";
-import { serverUrl } from "../App";
+import { useDispatch, useSelector } from "react-redux";
+import { api } from "../api/client";
+import { setMyOrders } from "../redux/userslice";
 
 function useGetMyOrders() {
   const dispatch = useDispatch();
-  const { userdata } = useSelector((state) => state.user);
+  const { userData } = useSelector((state) => state.user);
 
   useEffect(() => {
+    if (!userData || !["user", "owner"].includes(userData.role)) {
+      dispatch(setMyOrders([]));
+      return;
+    }
+
+    let active = true;
     const fetchOrders = async () => {
       try {
-        const result = await axios.get(`${serverUrl}/api/order/my-orders`, {
-          withCredentials: true,
-        });
-
-        dispatch(setMyOrders(result.data));
+        const result = await api.get("/api/order/my-orders");
+        if (active) {
+          dispatch(setMyOrders(result.data?.orders || []));
+        }
       } catch (err) {
-        console.log(err?.response?.data || err.message);
+        console.warn("Failed to load orders:", err?.message);
       }
     };
 
     fetchOrders();
-  }, [userdata, dispatch]);
+    return () => {
+      active = false;
+    };
+  }, [userData?._id, userData?.role, dispatch]);
 }
 
 export default useGetMyOrders;

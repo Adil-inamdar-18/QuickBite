@@ -1,14 +1,14 @@
 import { createSlice } from "@reduxjs/toolkit";
 
 const mapSlice = createSlice({
-  name: "user",
+  name: "map",
   initialState: {
-  location: {
-    lat: 18.5204,
-    lon: 73.8567,
+    location: {
+      lat: 18.5204,
+      lon: 73.8567,
+    },
+    address: "",
   },
-  address: null,
-},
   reducers: {
     setLocation: (state, action) => {
       const { lat, lon } = action.payload;

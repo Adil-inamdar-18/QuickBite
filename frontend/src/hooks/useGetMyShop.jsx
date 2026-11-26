@@ -1,35 +1,41 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { serverUrl } from "../App";
-import { useDispatch } from "react-redux";
-import { setUserData } from "../redux/userslice";
+import { useDispatch, useSelector } from "react-redux";
+import { api } from "../api/client";
 import { setMyShopData } from "../redux/ownerSlice";
 
 function useGetMyShop() {
   const dispatch = useDispatch();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { userData } = useSelector((state) => state.user);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const fetchShop = async () => {
-      try {
-        const result = await axios.get(`${serverUrl}/api/shop/get-my`, {
-          withCredentials: true,
-        });
+    if (!userData || userData.role !== "owner") {
+      dispatch(setMyShopData(null));
+      return;
+    }
 
-        dispatch(setMyShopData(result.data));
+    let active = true;
+    const fetchShop = async () => {
+      setLoading(true);
+      try {
+        const result = await api.get("/api/shop/get-my");
+        if (active) {
+          dispatch(setMyShopData(result.data?.shop || null));
+        }
       } catch (err) {
-        setError(err?.response?.data || err.message);
-        console.log(err?.response?.data || err.message);
+        console.warn("Failed to load my shop:", err?.message);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
     fetchShop();
-  }, [dispatch]);
+    return () => {
+      active = false;
+    };
+  }, [userData?._id, userData?.role, dispatch]);
 
-  return { loading, error };
+  return { loading };
 }
 
 export default useGetMyShop;

@@ -1,6 +1,6 @@
 import express from "express";
 import {
-    googleAuth,
+  googleAuth,
   resetPassword,
   sendOtp,
   signIn,
@@ -8,15 +8,16 @@ import {
   signUp,
   verifyOtp,
 } from "../controllers/auth.controllers.js";
+import { authRateLimiter, otpRateLimiter } from "../middlewares/rateLimiter.js";
 
 const authRouter = express.Router();
 
-authRouter.post("/signup", signUp);
-authRouter.post("/signin", signIn);
+authRouter.post("/signup", authRateLimiter, signUp);
+authRouter.post("/signin", authRateLimiter, signIn);
 authRouter.get("/signout", signOut);
-authRouter.post("/send-otp", sendOtp);
-authRouter.post("/verify-otp", verifyOtp);
-authRouter.post("/reset-password", resetPassword);
-authRouter.post("/google-auth", googleAuth);
+authRouter.post("/send-otp", otpRateLimiter, sendOtp);
+authRouter.post("/verify-otp", otpRateLimiter, verifyOtp);
+authRouter.post("/reset-password", authRateLimiter, resetPassword);
+authRouter.post("/google-auth", authRateLimiter, googleAuth);
 
 export default authRouter;

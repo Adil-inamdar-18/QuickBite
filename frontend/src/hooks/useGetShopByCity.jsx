@@ -1,38 +1,38 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { serverUrl } from "../App";
 import { useDispatch, useSelector } from "react-redux";
-import { setShopInMyCity, setUserData } from "../redux/userslice";
+import { api } from "../api/client";
+import { setShopInMyCity } from "../redux/userslice";
 
 function useGetShopByCity() {
   const dispatch = useDispatch();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
   const { currentCity } = useSelector((state) => state.user);
 
   useEffect(() => {
-    const fetchShop = async () => {
-      try {
-        const result = await axios.get(
-          `${serverUrl}/api/shop/get-by-city/${currentCity}`,
-          {
-            withCredentials: true,
-          },
-        );
+    let active = true;
+    const cityParam = currentCity?.trim() || "all";
 
-        dispatch(setShopInMyCity(result.data));
+    const fetchShops = async () => {
+      setLoading(true);
+      try {
+        const result = await api.get(`/api/shop/get-by-city/${encodeURIComponent(cityParam)}`);
+        if (active) {
+          dispatch(setShopInMyCity(result.data?.shops || []));
+        }
       } catch (err) {
-        setError(err?.response?.data || err.message);
-        console.log(err?.response?.data || err.message);
+        console.warn("Failed to load restaurants:", err?.message);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
-    fetchShop();
-  }, [currentCity]);
+    fetchShops();
+    return () => {
+      active = false;
+    };
+  }, [currentCity, dispatch]);
 
-  return { loading, error };
+  return { loading };
 }
 
 export default useGetShopByCity;

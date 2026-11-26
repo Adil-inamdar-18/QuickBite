@@ -1,11 +1,12 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "QuickBite food ordering and delivery backend API",
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "nodemon index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "author": "",
   "license": "ISC",
@@ -22,7 +23,6 @@
     "nodemailer": "^8.0.7",
     "nodemon": "^3.1.14",
     "razorpay": "^2.9.6",
-    "react-hot-toast": "^2.6.0",
     "socket.io": "^4.8.3"
   }
 }

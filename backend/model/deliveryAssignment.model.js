@@ -5,16 +5,24 @@ const deliveryAssignmentSchema = new mongoose.Schema(
     order: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Order",
+      required: true,
     },
     shop: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Shop",
+      required: true,
     },
     shopOrderId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
     },
     broadcastedTo: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    rejectedBy: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
@@ -27,13 +35,27 @@ const deliveryAssignmentSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["brodcasted", "assigned", "completed"],
-      default: "brodcasted",
+      enum: [
+        "broadcasted",
+        "assigned",
+        "picked_up",
+        "completed",
+        "expired",
+        "cancelled",
+      ],
+      default: "broadcasted",
     },
     acceptedAt: Date,
+    completedAt: Date,
+    expiresAt: {
+      type: Date,
+      default: () => new Date(Date.now() + 15 * 60 * 1000),
+    },
   },
   { timestamps: true },
 );
+
+deliveryAssignmentSchema.index({ assignedTo: 1, status: 1 });
 
 const DeliveryAssignment = mongoose.model(
   "DeliveryAssignment",

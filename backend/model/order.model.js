@@ -7,9 +7,10 @@ const shopOrderItemSchema = new mongoose.Schema(
       ref: "Item",
       required: true,
     },
-    name: String,
-    price: Number,
-    quantity: Number,
+    name: { type: String, required: true },
+    price: { type: Number, required: true, min: 0 },
+    quantity: { type: Number, required: true, min: 1 },
+    image: { type: String, default: "" },
   },
   { timestamps: true },
 );
@@ -19,17 +20,37 @@ const shopOrderSchema = new mongoose.Schema(
     shop: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Shop",
+      required: true,
     },
     owner: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
+      required: true,
     },
-    subtotal: Number,
+    subtotal: { type: Number, required: true, min: 0 },
     shopOrderItems: [shopOrderItemSchema],
     status: {
       type: String,
-      enum: ["pending", "preparing", "out of delivery", "delivered"],
+      enum: [
+        "pending",
+        "confirmed",
+        "preparing",
+        "ready",
+        "out of delivery",
+        "delivered",
+        "cancelled",
+        "rejected",
+      ],
       default: "pending",
+    },
+    cancellationReason: {
+      type: String,
+      default: "",
+    },
+    cancelledBy: {
+      type: String,
+      enum: ["user", "owner", "admin", null],
+      default: null,
     },
     assignment: {
       type: mongoose.Schema.Types.ObjectId,
@@ -39,15 +60,25 @@ const shopOrderSchema = new mongoose.Schema(
     assignedDeliveryBoy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-    },
-    deliveryOtp: {
-      type: String,
-    },
-    isotpVerified: {
-      type: Boolean,
       default: null,
     },
+    deliveryOtpHash: {
+      type: String,
+      default: null,
+    },
+    isOtpVerified: {
+      type: Boolean,
+      default: false,
+    },
     otpExpires: {
+      type: Date,
+      default: null,
+    },
+    otpAttempts: {
+      type: Number,
+      default: 0,
+    },
+    pickedUpAt: {
       type: Date,
       default: null,
     },
@@ -55,12 +86,20 @@ const shopOrderSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    deliveryEarning: {
+      type: Number,
+      default: 50,
+    },
   },
   { timestamps: true },
 );
 
 const orderSchema = new mongoose.Schema(
   {
+    orderNumber: {
+      type: String,
+      unique: true,
+    },
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -71,34 +110,82 @@ const orderSchema = new mongoose.Schema(
       enum: ["cod", "online"],
       required: true,
     },
-    deliveryAddress: {
-      text: String,
-      latitude: Number,
-      longitude: Number,
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "paid", "failed", "refunded"],
+      default: "pending",
     },
-    totalAmount: {
-      type: Number,
-    },
-    shopOrders: [shopOrderSchema],
     payment: {
       type: Boolean,
       default: false,
     },
-    rozarpayOrderId: {
+    deliveryAddress: {
+      text: { type: String, required: true },
+      landmark: { type: String, default: "" },
+      latitude: { type: Number, required: true },
+      longitude: { type: Number, required: true },
+    },
+    itemsSubtotal: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    deliveryFee: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    taxAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    couponCode: {
       type: String,
       default: "",
     },
-    rozarpaySecretId: {
+    totalAmount: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    shopOrders: [shopOrderSchema],
+    razorpayOrderId: {
       type: String,
       default: "",
     },
-    rozarpayPayment: {
+    razorpayPaymentId: {
       type: String,
       default: "",
+    },
+    razorpaySignature: {
+      type: String,
+      default: "",
+    },
+    refundId: {
+      type: String,
+      default: "",
+    },
+    refundStatus: {
+      type: String,
+      enum: ["none", "initiated", "processed", "failed"],
+      default: "none",
     },
   },
   { timestamps: true },
 );
+
+orderSchema.pre("save", function () {
+  if (!this.orderNumber) {
+    const rand = Math.floor(100000 + Math.random() * 900000);
+    this.orderNumber = `QB-${rand}`;
+  }
+});
 
 const Order = mongoose.model("Order", orderSchema);
 export default Order;

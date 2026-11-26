@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { IoIosArrowRoundBack } from "react-icons/io";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { serverUrl } from "../App";
 import { ClipLoader } from "react-spinners";
+import toast from "react-hot-toast";
+import { api, getErrorMessage } from "../api/client";
 
 function ForgotPassword() {
   const [step, setStep] = useState(1);
@@ -16,175 +16,182 @@ function ForgotPassword() {
 
   const navigate = useNavigate();
 
-  const handleSendOtp = async () => {
+  const handleSendOtp = async (e) => {
+    e.preventDefault();
+    setErr("");
     setLoading(true);
     try {
-      const result = await axios.post(
-        `${serverUrl}/api/auth/send-otp`,
-        { email },
-        { withCredentials: true },
-      );
-      setErr("");
-      setLoading(false);
+      await api.post("/api/auth/send-otp", { email });
+      toast.success("Verification OTP sent to your email");
       setStep(2);
     } catch (error) {
-      setErr(error?.response?.data?.message);
+      setErr(getErrorMessage(error, "Failed to send OTP"));
+    } finally {
       setLoading(false);
     }
   };
-  const handleVerifyOtp = async () => {
-    setLoading(true);
 
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setErr("");
+    setLoading(true);
     try {
-      const result = await axios.post(
-        `${serverUrl}/api/auth/verify-otp`,
-        { email, otp },
-        { withCredentials: true },
-      );
-      console.log(result);
-      setErr("");
+      await api.post("/api/auth/verify-otp", { email, otp });
+      toast.success("OTP verified");
       setStep(3);
-      setLoading(false);
     } catch (error) {
-      setErr(error?.response?.data?.message);
+      setErr(getErrorMessage(error, "Invalid or expired OTP"));
+    } finally {
       setLoading(false);
     }
   };
-  const handleResetPassword = async () => {
-    setLoading(true);
 
-    if (newPassword != confirmPassword) {
-      return null;
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setErr("");
+    if (newPassword.length < 6) {
+      return setErr("Password must be at least 6 characters.");
     }
+    if (newPassword !== confirmPassword) {
+      return setErr("Passwords do not match.");
+    }
+
+    setLoading(true);
     try {
-      const result = await axios.post(
-        `${serverUrl}/api/auth/reset-password`,
-        { email, newPassword },
-        { withCredentials: true },
-      );
-      console.log(result);
-      setErr("");
-      setLoading(false);
+      await api.post("/api/auth/reset-password", { email, newPassword });
+      toast.success("Password reset successfully! Please sign in.");
       navigate("/signin");
     } catch (error) {
-      setErr(error?.response?.data?.message);
+      setErr(getErrorMessage(error, "Failed to reset password"));
+    } finally {
       setLoading(false);
     }
   };
+
   return (
-    <div className="flex w-full items-center justify-center min-h-screen p-4 bg-[#fff9f6]">
-      <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-8">
-        <div className="flex items-center gap-4 mb-4">
-          <IoIosArrowRoundBack
-            className="text-[#ff4d2d]"
-            size={30}
+    <div className="flex w-full items-center justify-center min-h-screen p-4 bg-[#F8F9FB]">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm w-full max-w-md p-8">
+        <div className="flex items-center gap-3 mb-2">
+          <button
+            type="button"
             onClick={() => navigate("/signin")}
-          />
-          <h1 className="text-2xl font-bold text-center text-[#ff4d2d]">
-            Forgot Password
-          </h1>
+            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-700 cursor-pointer"
+          >
+            <IoIosArrowRoundBack size={26} />
+          </button>
+          <h1 className="text-xl font-bold text-slate-900">Reset Password</h1>
         </div>
-        {step == 1 && (
-          <div>
-            <div className="mb-6">
-              <label
-                htmlFor="email"
-                className="block text-gray-700 font-medium mb-1"
-              >
-                Email
+        <p className="text-sm text-slate-500 mb-6 pl-1">
+          Step {step} of 3 •{" "}
+          {step === 1
+            ? "Enter your registered email"
+            : step === 2
+              ? "Enter the 6-digit OTP"
+              : "Choose a strong new password"}
+        </p>
+
+        {step === 1 && (
+          <form onSubmit={handleSendOtp} className="space-y-4">
+            <div>
+              <label htmlFor="reset-email" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Email Address
               </label>
               <input
+                id="reset-email"
                 type="email"
-                className="w-full border rounded-lg px-3 py-2 focus:outline-none border-gray-200 "
-                placeholder="Enter your Email"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF4D2D]"
+                placeholder="you@example.com"
                 onChange={(e) => setEmail(e.target.value)}
                 value={email}
                 required
               />
             </div>
+            {err && <p className="text-xs font-medium text-red-600">{err}</p>}
             <button
-              className={`w-full font-semibold rounded-lg py-2 transition duration-200 hover:bg-[#e64323] cursor-pointer bg-[#ff4d2d] text-white`}
-              onClick={handleSendOtp}
+              type="submit"
               disabled={loading}
+              className="w-full font-semibold rounded-xl py-2.5 bg-[#FF4D2D] hover:bg-[#E63E20] text-white transition cursor-pointer flex justify-center"
             >
-              {loading ? <ClipLoader size={20} color="white" /> : "Send OTP"}
+              {loading ? <ClipLoader size={18} color="white" /> : "Send OTP"}
             </button>
-            {err && <p className="text-red-500 my-2.5">*{err}</p>}
-          </div>
+          </form>
         )}
-        {step == 2 && (
-          <div>
-            <div className="mb-6">
-              <label
-                htmlFor="email"
-                className="block text-gray-700 font-medium mb-1"
-              >
-                OTP
+
+        {step === 2 && (
+          <form onSubmit={handleVerifyOtp} className="space-y-4">
+            <div>
+              <label htmlFor="reset-otp" className="block text-sm font-medium text-slate-700 mb-1.5">
+                6-Digit OTP
               </label>
               <input
-                type="email"
-                className="w-full border rounded-lg px-3 py-2 focus:outline-none border-gray-200 "
-                placeholder="Enter OTP"
+                id="reset-otp"
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-center tracking-[0.4em] font-semibold text-base focus:outline-none focus:border-[#FF4D2D]"
+                placeholder="••••••"
                 onChange={(e) => setOtp(e.target.value)}
                 value={otp}
                 required
               />
             </div>
+            {err && <p className="text-xs font-medium text-red-600">{err}</p>}
             <button
-              className={`w-full font-semibold rounded-lg py-2 transition duration-200 hover:bg-[#e64323] cursor-pointer bg-[#ff4d2d] text-white`}
-              onClick={handleVerifyOtp}
+              type="submit"
               disabled={loading}
+              className="w-full font-semibold rounded-xl py-2.5 bg-[#FF4D2D] hover:bg-[#E63E20] text-white transition cursor-pointer flex justify-center"
             >
-              {loading ? <ClipLoader size={20} color="white" /> : "Verify OTP"}
+              {loading ? <ClipLoader size={18} color="white" /> : "Verify OTP"}
             </button>
-            {err && <p className="text-red-500 my-2.5">*{err}</p>}
-          </div>
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className="w-full text-xs font-semibold text-slate-500 hover:text-[#FF4D2D] cursor-pointer"
+            >
+              Change email or resend OTP
+            </button>
+          </form>
         )}
-        {step == 3 && (
-          <div>
-            <div className="mb-6">
-              <label
-                htmlFor="newPassword"
-                className="block text-gray-700 font-medium mb-1"
-              >
+
+        {step === 3 && (
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <div>
+              <label htmlFor="newPassword" className="block text-sm font-medium text-slate-700 mb-1.5">
                 New Password
               </label>
               <input
-                type="email"
-                className="w-full border rounded-lg px-3 py-2 focus:outline-none border-gray-200 "
-                placeholder="Enter New Password"
+                id="newPassword"
+                type="password"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF4D2D]"
+                placeholder="Minimum 6 characters"
                 onChange={(e) => setNewPassword(e.target.value)}
                 value={newPassword}
+                required
               />
             </div>
-            <div className="mb-6">
-              <label
-                htmlFor="newPassword"
-                className="block text-gray-700 font-medium mb-1"
-              >
-                Confirm Password
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700 mb-1.5">
+                Confirm New Password
               </label>
               <input
-                type="email"
-                className="w-full border rounded-lg px-3 py-2 focus:outline-none border-gray-200 "
-                placeholder="Confirm Password"
+                id="confirmPassword"
+                type="password"
+                className="w-full border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-[#FF4D2D]"
+                placeholder="Re-enter password"
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 value={confirmPassword}
+                required
               />
             </div>
+            {err && <p className="text-xs font-medium text-red-600">{err}</p>}
             <button
-              className={`w-full font-semibold rounded-lg py-2 transition duration-200 hover:bg-[#e64323] cursor-pointer bg-[#ff4d2d] text-white`}
-              onClick={handleResetPassword}
+              type="submit"
               disabled={loading}
+              className="w-full font-semibold rounded-xl py-2.5 bg-[#FF4D2D] hover:bg-[#E63E20] text-white transition cursor-pointer flex justify-center"
             >
-              {loading ? (
-                <ClipLoader size={20} color="white" />
-              ) : (
-                "Reset Password"
-              )}
+              {loading ? <ClipLoader size={18} color="white" /> : "Update Password"}
             </button>
-            {err && <p className="text-red-500 my-2.5">*{err}</p>}
-          </div>
+          </form>
         )}
       </div>
     </div>

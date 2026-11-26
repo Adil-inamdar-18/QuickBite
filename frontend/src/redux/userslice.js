@@ -1,112 +1,219 @@
 import { createSlice } from "@reduxjs/toolkit";
 
-const userSilce = createSlice({
+const loadCartFromStorage = () => {
+  try {
+    const raw = localStorage.getItem("qb_cart_v1");
+    if (!raw) return { items: [], shopId: null, shopName: "" };
+    const parsed = JSON.parse(raw);
+    const items = Array.isArray(parsed.items) ? parsed.items : [];
+    return {
+      items,
+      shopId: parsed.shopId || items[0]?.shop || null,
+      shopName: parsed.shopName || items[0]?.shopName || "",
+    };
+  } catch {
+    return { items: [], shopId: null, shopName: "" };
+  }
+};
+
+const saveCartToStorage = (items, shopId, shopName) => {
+  try {
+    localStorage.setItem(
+      "qb_cart_v1",
+      JSON.stringify({ items, shopId, shopName }),
+    );
+  } catch {
+    // Ignore storage quota errors
+  }
+};
+
+const computeTotal = (items) =>
+  items.reduce((sum, i) => sum + Number(i.price) * Number(i.quantity), 0);
+
+const initialCart = loadCartFromStorage();
+
+const userSlice = createSlice({
   name: "user",
   initialState: {
     userData: null,
-    currentCity: null,
-    currentState: null,
-    currentAddress: null,
-    shopInMyCity: null,
-    itemsInMyCity: null,
-    cartItems: [],
-    totalAmount: 0,
+    authChecked: false,
+    currentCity: localStorage.getItem("qb_city") || "Pune",
+    currentState: "",
+    currentAddress: "",
+    shopInMyCity: [],
+    itemsInMyCity: [],
+    cartItems: initialCart.items,
+    cartShopId: initialCart.shopId,
+    cartShopName: initialCart.shopName,
+    totalAmount: computeTotal(initialCart.items),
     myOrders: [],
     searchItems: null,
+    searchShops: [],
+    notifications: [],
+    unreadCount: 0,
     socket: null,
   },
   reducers: {
-    setUserData: (state, actions) => {
-      state.userData = actions.payload;
+    setUserData: (state, action) => {
+      state.userData = action.payload;
     },
-    setCurrentCity: (state, actions) => {
-      state.currentCity = actions.payload;
+    setAuthChecked: (state, action) => {
+      state.authChecked = action.payload;
     },
-    setCurrentState: (state, actions) => {
-      state.currentState = actions.payload;
+    setCurrentCity: (state, action) => {
+      state.currentCity = action.payload;
+      if (action.payload) {
+        try {
+          localStorage.setItem("qb_city", action.payload);
+        } catch {
+          // ignore
+        }
+      }
     },
-    setCurrentAddress: (state, actions) => {
-      state.currentAddress = actions.payload;
+    setCurrentState: (state, action) => {
+      state.currentState = action.payload;
     },
-    setShopInMyCity: (state, actions) => {
-      state.shopInMyCity = actions.payload;
+    setCurrentAddress: (state, action) => {
+      state.currentAddress = action.payload;
     },
-    setItemsInMyCity: (state, actions) => {
-      state.itemsInMyCity = actions.payload;
+    setShopInMyCity: (state, action) => {
+      state.shopInMyCity = action.payload || [];
     },
-    setSocket: (state, actions) => {
-      state.socket = actions.payload;
+    setItemsInMyCity: (state, action) => {
+      state.itemsInMyCity = action.payload || [];
     },
-    addToCart: (state, actions) => {
-      const cartItem = actions.payload;
-      const exstingItem = state.cartItems.find((i) => i.id == cartItem.id);
-      if (exstingItem) {
-        exstingItem.quantity += cartItem.quantity;
+    setSocket: (state, action) => {
+      state.socket = action.payload;
+    },
+    addToCart: (state, action) => {
+      const cartItem = action.payload;
+      const itemShopId = typeof cartItem.shop === "object" ? cartItem.shop?._id : cartItem.shop;
+      const itemShopName = cartItem.shopName || cartItem.shop?.name || "";
+
+      if (state.cartItems.length > 0 && state.cartShopId && itemShopId && state.cartShopId !== itemShopId) {
+        if (!cartItem.replaceCart) {
+          return;
+        }
+        state.cartItems = [];
+      }
+
+      const normalizedItem = {
+        ...cartItem,
+        shop: itemShopId,
+        shopName: itemShopName,
+      };
+      delete normalizedItem.replaceCart;
+
+      const existingItem = state.cartItems.find((i) => i.id === normalizedItem.id);
+      if (existingItem) {
+        existingItem.quantity += normalizedItem.quantity;
       } else {
-        state.cartItems.push(cartItem);
+        state.cartItems.push(normalizedItem);
       }
-      state.totalAmount = state.cartItems.reduce(
-        (sum, i) => sum + i.price * i.quantity,
-        0,
-      );
+
+      state.cartShopId = itemShopId || state.cartShopId;
+      state.cartShopName = itemShopName || state.cartShopName;
+      state.totalAmount = computeTotal(state.cartItems);
+      saveCartToStorage(state.cartItems, state.cartShopId, state.cartShopName);
     },
-    updateQuantity: (state, actions) => {
-      const { id, quantity } = actions.payload;
-      const item = state.cartItems.find((i) => i.id == id);
-      if (item) {
-        item.quantity = quantity;
+    updateQuantity: (state, action) => {
+      const { id, quantity } = action.payload;
+      if (quantity <= 0) {
+        state.cartItems = state.cartItems.filter((i) => i.id !== id);
+      } else {
+        const item = state.cartItems.find((i) => i.id === id);
+        if (item) item.quantity = quantity;
       }
-      state.totalAmount = state.cartItems.reduce(
-        (sum, i) => sum + i.price * i.quantity,
-        0,
-      );
+      if (state.cartItems.length === 0) {
+        state.cartShopId = null;
+        state.cartShopName = "";
+      }
+      state.totalAmount = computeTotal(state.cartItems);
+      saveCartToStorage(state.cartItems, state.cartShopId, state.cartShopName);
     },
-
-    removeCartItem: (state, actions) => {
-      state.cartItems = state.cartItems.filter((i) => i.id !== actions.payload);
-      state.totalAmount = state.cartItems.reduce(
-        (sum, i) => sum + i.price * i.quantity,
-        0,
-      );
+    removeCartItem: (state, action) => {
+      state.cartItems = state.cartItems.filter((i) => i.id !== action.payload);
+      if (state.cartItems.length === 0) {
+        state.cartShopId = null;
+        state.cartShopName = "";
+      }
+      state.totalAmount = computeTotal(state.cartItems);
+      saveCartToStorage(state.cartItems, state.cartShopId, state.cartShopName);
     },
-
+    clearCart: (state) => {
+      state.cartItems = [];
+      state.cartShopId = null;
+      state.cartShopName = "";
+      state.totalAmount = 0;
+      saveCartToStorage([], null, "");
+    },
     setMyOrders: (state, action) => {
-      state.myOrders = action.payload;
+      state.myOrders = action.payload || [];
     },
     addMyOrder: (state, action) => {
-      state.myOrders = [action.payload, ...state.myOrders];
+      const incoming = action.payload;
+      if (!incoming?._id) return;
+      const exists = state.myOrders.some((o) => o._id === incoming._id);
+      if (!exists) {
+        state.myOrders = [incoming, ...state.myOrders];
+      }
     },
     updateOrderStatus: (state, action) => {
       const { orderId, shopId, status } = action.payload;
-
-      const order = state.myOrders.find((o) => o._id == orderId);
-      // console.log(state.myOrders);
-      if (order) {
-        if (order.shopOrders && order.shopOrders.shop._id == shopId) {
+      const order = state.myOrders.find((o) => o._id === orderId);
+      if (order?.shopOrders) {
+        if (Array.isArray(order.shopOrders)) {
+          const so = order.shopOrders.find((s) => (s.shop?._id || s.shop) === shopId);
+          if (so) so.status = status;
+        } else if ((order.shopOrders.shop?._id || order.shopOrders.shop) === shopId) {
           order.shopOrders.status = status;
         }
       }
     },
     updateRealTimeOrderStatus: (state, action) => {
       const { orderId, shopId, status } = action.payload;
-
-      const order = state.myOrders.find((o) => o._id == orderId);
-      // console.log(state.myOrders);
-      if (order) {
-        const shopOrder = order.shopOrders.find((so) => so.shop._id == shopId);
-        if (shopOrder) {
-          shopOrder.status = status;
+      const order = state.myOrders.find((o) => o._id === orderId);
+      if (order?.shopOrders) {
+        if (Array.isArray(order.shopOrders)) {
+          const shopOrder = order.shopOrders.find((so) => (so.shop?._id || so.shop) === shopId);
+          if (shopOrder) shopOrder.status = status;
+        } else if ((order.shopOrders.shop?._id || order.shopOrders.shop) === shopId) {
+          order.shopOrders.status = status;
         }
       }
     },
     setSearchItems: (state, action) => {
       state.searchItems = action.payload;
     },
+    setSearchShops: (state, action) => {
+      state.searchShops = action.payload || [];
+    },
+    setNotifications: (state, action) => {
+      state.notifications = action.payload.notifications || [];
+      state.unreadCount = action.payload.unreadCount || 0;
+    },
+    addNotification: (state, action) => {
+      state.notifications = [action.payload, ...state.notifications].slice(0, 40);
+      state.unreadCount += 1;
+    },
+    markAllNotificationsReadState: (state) => {
+      state.notifications = state.notifications.map((n) => ({ ...n, isRead: true }));
+      state.unreadCount = 0;
+    },
+    markNotificationReadState: (state, action) => {
+      const id = action.payload;
+      const target = state.notifications.find((n) => n._id === id);
+      if (target && !target.isRead) {
+        target.isRead = true;
+        state.unreadCount = Math.max(0, state.unreadCount - 1);
+      }
+    },
   },
 });
 
 export const {
   setUserData,
+  setAuthChecked,
   setCurrentCity,
   setCurrentState,
   setCurrentAddress,
@@ -115,11 +222,18 @@ export const {
   addToCart,
   updateQuantity,
   removeCartItem,
+  clearCart,
   setMyOrders,
   addMyOrder,
   updateOrderStatus,
   setSearchItems,
+  setSearchShops,
   setSocket,
-  updateRealTimeOrderStatus
-} = userSilce.actions;
-export default userSilce.reducer;
+  updateRealTimeOrderStatus,
+  setNotifications,
+  addNotification,
+  markAllNotificationsReadState,
+  markNotificationReadState,
+} = userSlice.actions;
+
+export default userSlice.reducer;

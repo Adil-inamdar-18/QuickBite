@@ -1,113 +1,201 @@
 import React, { useEffect } from "react";
-import { Route, Routes, Navigate } from "react-router-dom";
-import SignUp from "./pages/SignUp";
-import SignIn from "./pages/SignIn";
-import ForgotPassword from "./pages/ForgotPassword";
-import useGetCurrentUser from "./hooks/useGetCurrentUser";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
-import Home from "./pages/Home";
+import { io } from "socket.io-client";
+import toast, { Toaster } from "react-hot-toast";
+
+import { SERVER_URL } from "./api/client";
+import { addNotification, setSocket } from "./redux/userslice";
+import useGetCurrentUser from "./hooks/useGetCurrentUser";
 import useGetCity from "./hooks/useGetCity";
 import useGetMyShop from "./hooks/useGetMyShop";
+import useGetShopByCity from "./hooks/useGetShopByCity";
+import useGetItemByCity from "./hooks/useGetItemByCity";
+import useGetMyOrders from "./hooks/useGetMyOrders";
+import useUpdateLocation from "./hooks/useUpdateLocation";
+
+import ErrorBoundary from "./component/ErrorBoundary";
+import ProtectedRoute from "./component/ProtectedRoute";
+import { PageLoader } from "./component/Skeletons";
+
+import Home from "./pages/Home";
+import SignIn from "./pages/SignIn";
+import SignUp from "./pages/SignUp";
+import ForgotPassword from "./pages/ForgotPassword";
 import CreateEditShop from "./pages/CreateEditShop";
 import AddItem from "./pages/AddItem";
 import EditItem from "./pages/EditItem";
-import useGetShopByCity from "./hooks/useGetShopByCity";
-import useGetItemByCity from "./hooks/useGetItemByCity";
 import CartPage from "./pages/CartPage";
 import CheckOut from "./pages/CheckOut";
-import { Toaster } from "react-hot-toast";
 import OrderPlaced from "./pages/OrderPlaced";
 import MyOrders from "./pages/MyOrders";
-import useGetMyOrders from "./hooks/useGetMyOrders";
-import useUpdateLocation from "./hooks/useUpdateLocation";
 import TrackOrderPage from "./pages/TrackOrderPage";
 import Shop from "./pages/Shop";
-import { io } from "socket.io-client";
-import { setSocket } from "./redux/userslice";
-export const serverUrl = "http://localhost:8000";
-// export const serverUrl = "https://one-quickbite-backend.onrender.com";
-function App() {
+import ProfilePage from "./pages/ProfilePage";
+import SupportPage from "./pages/SupportPage";
+
+function AppRoutes() {
   const dispatch = useDispatch();
   useGetCurrentUser();
-  useUpdateLocation();
+  useGetCity();
+  useGetShopByCity();
   useGetItemByCity();
   useGetMyShop();
-  useGetCity();
   useGetMyOrders();
-  useGetShopByCity();
-  const { userData } = useSelector((state) => state.user);
+  useUpdateLocation();
+
+  const { userData, authChecked } = useSelector((state) => state.user);
 
   useEffect(() => {
-    const socketInstance = io(serverUrl, { withCredentials: true });
+    if (!userData?._id) {
+      dispatch(setSocket(null));
+      return;
+    }
+
+    const socketInstance = io(SERVER_URL, {
+      withCredentials: true,
+      transports: ["websocket", "polling"],
+    });
+
     dispatch(setSocket(socketInstance));
-    socketInstance.on("connect", () => {
-      if (userData) {
-        socketInstance.emit("identity", { userId: userData._id });
+
+    socketInstance.on("notification", (notif) => {
+      if (notif) {
+        dispatch(addNotification(notif));
+        toast(notif.message, { icon: "🔔" });
       }
     });
 
     return () => {
+      socketInstance.off("notification");
       socketInstance.disconnect();
+      dispatch(setSocket(null));
     };
-  }, [userData?._id]);
+  }, [userData?._id, dispatch]);
+
+  if (!authChecked) {
+    return <PageLoader />;
+  }
+
   return (
-    <>
-      <Toaster position="top-center" />
-      <Routes>
-        <Route
-          path="/signup"
-          element={!userData ? <SignUp /> : <Navigate to={"/"} />}
-        />
-        <Route
-          path="/signin"
-          element={!userData ? <SignIn /> : <Navigate to={"/"} />}
-        />
-        <Route
-          path="/fortgot-password"
-          element={!userData ? <ForgotPassword /> : <Navigate to={"/"} />}
-        />
-        <Route
-          path="/"
-          element={userData ? <Home /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/create-edit-shop"
-          element={userData ? <CreateEditShop /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/add-item"
-          element={userData ? <AddItem /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/edit-item/:itemId"
-          element={userData ? <EditItem /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/cart"
-          element={userData ? <CartPage /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/checkout"
-          element={userData ? <CheckOut /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/order-placed"
-          element={userData ? <OrderPlaced /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/my-orders"
-          element={userData ? <MyOrders /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/track-order/:orderId"
-          element={userData ? <TrackOrderPage /> : <Navigate to={"/signin"} />}
-        />
-        <Route
-          path="/shop/:shopId"
-          element={userData ? <Shop /> : <Navigate to={"/signin"} />}
-        />
-      </Routes>
-    </>
+    <Routes>
+      <Route
+        path="/signup"
+        element={!userData ? <SignUp /> : <Navigate to="/" replace />}
+      />
+      <Route
+        path="/signin"
+        element={!userData ? <SignIn /> : <Navigate to="/" replace />}
+      />
+      <Route
+        path="/forgot-password"
+        element={!userData ? <ForgotPassword /> : <Navigate to="/" replace />}
+      />
+      <Route
+        path="/fortgot-password"
+        element={<Navigate to="/forgot-password" replace />}
+      />
+
+      {/* Home renders customer discovery for guests & customers, or role dashboards */}
+      <Route path="/" element={<Home />} />
+      <Route path="/shop/:shopId" element={<Shop />} />
+      <Route path="/cart" element={<CartPage />} />
+
+      {/* Customer Protected Routes */}
+      <Route
+        path="/checkout"
+        element={
+          <ProtectedRoute allowedRoles={["user"]}>
+            <CheckOut />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/order-placed"
+        element={
+          <ProtectedRoute allowedRoles={["user"]}>
+            <OrderPlaced />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/my-orders"
+        element={
+          <ProtectedRoute allowedRoles={["user", "owner"]}>
+            <MyOrders />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/track-order/:orderId"
+        element={
+          <ProtectedRoute allowedRoles={["user", "owner", "deliveryBoy", "admin"]}>
+            <TrackOrderPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Owner Protected Routes */}
+      <Route
+        path="/create-edit-shop"
+        element={
+          <ProtectedRoute allowedRoles={["owner"]}>
+            <CreateEditShop />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/add-item"
+        element={
+          <ProtectedRoute allowedRoles={["owner"]}>
+            <AddItem />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/edit-item/:itemId"
+        element={
+          <ProtectedRoute allowedRoles={["owner"]}>
+            <EditItem />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Shared Authenticated Routes */}
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <ProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/support"
+        element={
+          <ProtectedRoute>
+            <SupportPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+function App() {
+  return (
+    <ErrorBoundary>
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 3000,
+          style: { borderRadius: "12px", fontSize: "14px" },
+        }}
+      />
+      <AppRoutes />
+    </ErrorBoundary>
   );
 }
 

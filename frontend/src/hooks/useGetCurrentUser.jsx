@@ -1,34 +1,45 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-import { serverUrl } from "../App";
 import { useDispatch } from "react-redux";
-import { setUserData } from "../redux/userslice";
+import { api } from "../api/client";
+import { setAuthChecked, setNotifications, setUserData } from "../redux/userslice";
 
 function useGetCurrentUser() {
   const dispatch = useDispatch();
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
+    let active = true;
     const fetchUser = async () => {
       try {
-        const result = await axios.get(`${serverUrl}/api/user/current`, {
-          withCredentials: true,
-        });
-
-        dispatch(setUserData(result.data.user));
-      } catch (err) {
-        setError(err?.response?.data || err.message);
-        console.log(err?.response?.data || err.message);
+        const result = await api.get("/api/user/current");
+        if (active && result.data?.user) {
+          dispatch(setUserData(result.data.user));
+          try {
+            const notifRes = await api.get("/api/user/notifications");
+            if (active && notifRes.data?.success) {
+              dispatch(setNotifications(notifRes.data));
+            }
+          } catch {
+            // ignore notification fetch failure
+          }
+        }
+      } catch {
+        if (active) dispatch(setUserData(null));
       } finally {
-        setLoading(false);
+        if (active) {
+          dispatch(setAuthChecked(true));
+          setLoading(false);
+        }
       }
     };
 
     fetchUser();
+    return () => {
+      active = false;
+    };
   }, [dispatch]);
 
-  return { loading, error };
+  return { loading };
 }
 
 export default useGetCurrentUser;
